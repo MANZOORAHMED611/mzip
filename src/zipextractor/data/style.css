@@ -1,0 +1,150 @@
+/* ZIP Extractor Custom Styles */
+
+/* Drop zone highlight when dragging files */
+.drop-highlight {
+    background-color: alpha(@accent_bg_color, 0.1);
+    border: 2px dashed @accent_color;
+    border-radius: 12px;
+}
+
+/* Progress bar success state */
+progressbar.success > trough > progress {
+    background-color: @success_color;
+}
+
+/* Progress bar error state */
+progressbar.error > trough > progress {
+    background-color: @error_color;
+}
+
+/* Archive row status colors */
+.success {
+    color: @success_color;
+}
+
+.warning {
+    color: @warning_color;
+}
+
+.error {
+    color: @error_color;
+}
+
+.accent {
+    color: @accent_color;
+}
+
+/* Archive list row styling */
+.archive-row {
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: background-color 200ms ease;
+}
+
+.archive-row:hover {
+    background-color: alpha(@accent_bg_color, 0.05);
+}
+
+/* Progress dialog styling */
+.progress-dialog {
+    padding: 24px;
+}
+
+.progress-dialog .heading {
+    font-weight: 600;
+}
+
+/* Monospace text for speed display */
+.monospace {
+    font-family: monospace;
+    font-feature-settings: "tnum";
+}
+
+/* Caption text styling */
+.caption {
+    font-size: 0.9em;
+}
+
+/* Settings dialog styling */
+.settings-group {
+    margin-bottom: 24px;
+}
+
+/* Conflict dialog warning icon */
+.conflict-warning {
+    color: @warning_color;
+}
+
+/* Archive inspector file tree */
+.file-tree {
+    font-size: 0.95em;
+}
+
+.file-tree treeview {
+    background-color: transparent;
+}
+
+/* Extraction complete animation */
+@keyframes pulse-success {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+.extraction-complete {
+    animation: pulse-success 1s ease-in-out;
+}
+
+/* Button pill styling enhancement */
+button.pill {
+    min-width: 80px;
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+/* Circular icon buttons */
+button.circular {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 4px;
+    border-radius: 50%;
+}
+
+/* Status indicators */
+.status-queued {
+    color: @dim_label_color;
+}
+
+.status-running {
+    color: @accent_color;
+}
+
+.status-paused {
+    color: @warning_color;
+}
+
+.status-completed {
+    color: @success_color;
+}
+
+.status-failed {
+    color: @error_color;
+}
+
+.status-cancelled {
+    color: @warning_color;
+}
+
+/* Drop zone empty state */
+.empty-state-icon {
+    opacity: 0.5;
+}
+
+.empty-state-title {
+    font-size: 1.2em;
+    font-weight: 600;
+}
+
+.empty-state-description {
+    color: @dim_label_color;
+}

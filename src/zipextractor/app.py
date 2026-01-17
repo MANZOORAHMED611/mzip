@@ -12,13 +12,16 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gio, GLib
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
 from zipextractor import __version__
 from zipextractor.utils.logging import get_logger
+
+# CSS file location relative to this module
+CSS_FILE = "data/style.css"
 
 logger = get_logger(__name__)
 
@@ -58,6 +61,7 @@ class ZipExtractorApp(Adw.Application):
         """
         logger.debug("Application startup")
         self._setup_actions()
+        self._load_css()
 
     def _on_activate(self, app: Adw.Application) -> None:
         """Handle application activation.
@@ -153,3 +157,30 @@ class ZipExtractorApp(Adw.Application):
             website="https://github.com/zipextractor/zipextractor",
         )
         about.present()
+
+    def _load_css(self) -> None:
+        """Load custom CSS styles for the application."""
+        from pathlib import Path
+
+        # Find CSS file relative to this module
+        module_dir = Path(__file__).parent
+        css_path = module_dir / CSS_FILE
+
+        if not css_path.exists():
+            logger.warning("CSS file not found: %s", css_path)
+            return
+
+        try:
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_path(str(css_path))
+
+            display = Gdk.Display.get_default()
+            if display:
+                Gtk.StyleContext.add_provider_for_display(
+                    display,
+                    css_provider,
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+                )
+                logger.debug("Custom CSS loaded from %s", css_path)
+        except Exception as e:
+            logger.warning("Failed to load CSS: %s", e)

@@ -27,6 +27,7 @@ from zipextractor.gui.widgets import (
 )
 from zipextractor.gui.workers import ExtractionWorker, create_extraction_task
 from zipextractor.utils.config import ConfigManager
+from zipextractor.utils.history import HistoryManager
 from zipextractor.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -62,6 +63,9 @@ class MainWindow(Adw.ApplicationWindow):
         # Extraction state
         self._current_worker: ExtractionWorker | None = None
         self._progress_dialog: ProgressDialog | None = None
+
+        # History manager
+        self._history_manager = HistoryManager()
 
         self._build_ui()
         self._setup_actions()
@@ -206,12 +210,30 @@ class MainWindow(Adw.ApplicationWindow):
         clear_action.connect("activate", self._on_clear_clicked)
         self.add_action(clear_action)
 
+        # Settings action
+        settings_action = Gio.SimpleAction.new("settings", None)
+        settings_action.connect("activate", self._on_settings_action)
+        self.add_action(settings_action)
+
+        # Pause/Resume action
+        pause_action = Gio.SimpleAction.new("pause-resume", None)
+        pause_action.connect("activate", self._on_pause_resume_action)
+        self.add_action(pause_action)
+
+        # Cancel action
+        cancel_action = Gio.SimpleAction.new("cancel", None)
+        cancel_action.connect("activate", self._on_cancel_action)
+        self.add_action(cancel_action)
+
         # Keyboard shortcuts
         app = self.get_application()
         if app is not None:
             app.set_accels_for_action("win.add-files", ["<Control>o"])
             app.set_accels_for_action("win.extract", ["<Control>e"])
             app.set_accels_for_action("win.clear", ["<Control>w"])
+            app.set_accels_for_action("win.settings", ["<Control>comma"])
+            app.set_accels_for_action("win.pause-resume", ["space"])
+            app.set_accels_for_action("win.cancel", ["Escape"])
 
     def _setup_drag_drop(self) -> None:
         """Set up drag-and-drop support."""
@@ -448,6 +470,15 @@ class MainWindow(Adw.ApplicationWindow):
                 self._archive_list.update_archive_status(
                     task.archive_path, TaskStatus.COMPLETED
                 )
+
+                # Record in history
+                self._history_manager.add_extraction(
+                    archive_path=task.archive_path,
+                    destination_path=task.destination_path,
+                    extracted_files=task.extracted_files,
+                    extracted_bytes=task.extracted_bytes,
+                    success=True,
+                )
             else:
                 message = task.error_message or "Extraction failed"
                 self._progress_dialog.show_complete(False, message)
@@ -455,6 +486,16 @@ class MainWindow(Adw.ApplicationWindow):
                 # Update archive status to failed
                 self._archive_list.update_archive_status(
                     task.archive_path, TaskStatus.FAILED
+                )
+
+                # Record failure in history
+                self._history_manager.add_extraction(
+                    archive_path=task.archive_path,
+                    destination_path=task.destination_path,
+                    extracted_files=task.extracted_files,
+                    extracted_bytes=task.extracted_bytes,
+                    success=False,
+                    error_message=task.error_message,
                 )
 
         self._current_worker = None
@@ -503,7 +544,17 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_settings_clicked(self, button: Gtk.Button) -> None:
         """Handle Settings button click."""
-        logger.debug("Settings clicked")
+        self._show_settings_dialog()
+
+    def _on_settings_action(
+        self, action: Gio.SimpleAction, parameter: object
+    ) -> None:
+        """Handle settings action (keyboard shortcut)."""
+        self._show_settings_dialog()
+
+    def _show_settings_dialog(self) -> None:
+        """Show the settings dialog."""
+        logger.debug("Settings dialog opened")
 
         dialog = SettingsDialog(
             parent=self,
@@ -511,6 +562,29 @@ class MainWindow(Adw.ApplicationWindow):
         )
         dialog.connect("settings-changed", self._on_settings_changed)
         dialog.present()
+
+    def _on_pause_resume_action(
+        self, action: Gio.SimpleAction, parameter: object
+    ) -> None:
+        """Handle pause/resume action (keyboard shortcut)."""
+        if self._current_worker and self._progress_dialog:
+            # Toggle pause state
+            if self._current_worker.task.status == TaskStatus.PAUSED:
+                self._current_worker.resume()
+                logger.debug("Extraction resumed via keyboard shortcut")
+            elif self._current_worker.task.status == TaskStatus.RUNNING:
+                self._current_worker.pause()
+                logger.debug("Extraction paused via keyboard shortcut")
+
+    def _on_cancel_action(
+        self, action: Gio.SimpleAction, parameter: object
+    ) -> None:
+        """Handle cancel action (keyboard shortcut)."""
+        if self._current_worker:
+            self._current_worker.cancel()
+            logger.debug("Extraction cancelled via keyboard shortcut")
+        elif self._progress_dialog:
+            self._progress_dialog.close()
 
     def _on_settings_changed(
         self, dialog: SettingsDialog, settings: object
