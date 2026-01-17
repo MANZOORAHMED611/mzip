@@ -96,6 +96,7 @@ known-first-party = ["zipextractor"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "ARG001",   # Unused function argument (fixtures)
+    "ARG002",   # Unused method argument (mock parameters from @patch)
     "PLR2004",  # Magic value comparison in tests is OK
     "PLC0415",  # Import not at top level (TDD style - imports in tests)
     "SIM105",   # contextlib.suppress preference (explicit try/except clearer in tests)
@@ -113,6 +114,15 @@ known-first-party = ["zipextractor"]
     "E402",     # Import after gi.require_version (required for GTK)
     "ARG002",   # Unused method argument (GTK callbacks have fixed signatures)
     "PLC0415",  # Import not at top level (lazy imports for performance)
+    "TC001",    # Move import to TYPE_CHECKING (GTK types used at runtime)
+    "RUF012",   # Mutable class attribute should be ClassVar (__gsignals__ is GTK pattern)
+]
+"src/zipextractor/gui/widgets/*.py" = [
+    "E402",     # Import after gi.require_version (required for GTK)
+    "ARG002",   # Unused method argument (GTK callbacks have fixed signatures)
+    "PLC0415",  # Import not at top level (lazy imports for performance)
+    "TC001",    # Move import to TYPE_CHECKING (GTK types used at runtime)
+    "RUF012",   # Mutable class attribute should be ClassVar (__gsignals__ is GTK pattern)
 ]
 "src/zipextractor/__main__.py" = [
     "PLC0415",  # Import not at top level (lazy imports for fast --help)

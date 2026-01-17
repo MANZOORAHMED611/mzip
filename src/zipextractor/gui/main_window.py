@@ -18,6 +18,15 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+from zipextractor.core.models import ExtractionTask, ProgressStats, TaskStatus
+from zipextractor.gui.widgets import (
+    ArchiveInspector,
+    ArchiveList,
+    ProgressDialog,
+    SettingsDialog,
+)
+from zipextractor.gui.workers import ExtractionWorker, create_extraction_task
+from zipextractor.utils.config import ConfigManager
 from zipextractor.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -43,12 +52,23 @@ class MainWindow(Adw.ApplicationWindow):
             default_height=600,
         )
 
-        self._archives: list[Path] = []
-        self._destination: Path = Path.home() / "Downloads"
+        # Configuration
+        self._config_manager = ConfigManager()
+        self._settings = self._config_manager.load()
+
+        # Use settings for default destination
+        self._destination: Path = self._settings.default_destination
+
+        # Extraction state
+        self._current_worker: ExtractionWorker | None = None
+        self._progress_dialog: ProgressDialog | None = None
 
         self._build_ui()
         self._setup_actions()
         self._setup_drag_drop()
+
+        # Apply saved theme
+        self._apply_theme(self._settings.dark_mode)
 
         logger.info("Main window created")
 
@@ -95,9 +115,12 @@ class MainWindow(Adw.ApplicationWindow):
         content_box.set_vexpand(True)
         toolbar_view.set_content(content_box)
 
-        # Drop zone / archive list area
-        self._drop_zone = self._create_drop_zone()
-        content_box.append(self._drop_zone)
+        # Archive list (with integrated drop zone)
+        self._archive_list = ArchiveList()
+        self._archive_list.connect("archive-removed", self._on_archive_removed)
+        self._archive_list.connect("archive-inspect", self._on_archive_inspect)
+        self._archive_list.connect("archives-changed", self._on_archives_changed)
+        content_box.append(self._archive_list)
 
         # Destination panel
         dest_box = self._create_destination_panel()
@@ -129,23 +152,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._extract_button.connect("clicked", self._on_extract_clicked)
         self._extract_button.set_sensitive(False)
         action_box.append(self._extract_button)
-
-    def _create_drop_zone(self) -> Gtk.Widget:
-        """Create the drop zone widget.
-
-        Returns:
-            The drop zone widget.
-        """
-        # Status page as drop zone
-        drop_zone = Adw.StatusPage(
-            title="Drop ZIP Files Here",
-            description="Or click 'Add Files' to browse",
-            icon_name="folder-download-symbolic",
-        )
-        drop_zone.set_vexpand(True)
-        drop_zone.add_css_class("card")
-
-        return drop_zone
 
     def _create_destination_panel(self) -> Gtk.Widget:
         """Create the destination selection panel.
@@ -213,7 +219,9 @@ class MainWindow(Adw.ApplicationWindow):
         drop_target.connect("drop", self._on_drop)
         drop_target.connect("enter", self._on_drag_enter)
         drop_target.connect("leave", self._on_drag_leave)
-        self._drop_zone.add_controller(drop_target)
+        # Attach drop target to the archive list's drop zone widget
+        drop_widget = self._archive_list.get_drop_target_widget()
+        drop_widget.add_controller(drop_target)
 
     def _on_drop(
         self,
@@ -255,7 +263,7 @@ class MainWindow(Adw.ApplicationWindow):
         Returns:
             The drag action to use.
         """
-        self._drop_zone.add_css_class("drop-highlight")
+        self._archive_list.get_drop_target_widget().add_css_class("drop-highlight")
         return Gdk.DragAction.COPY
 
     def _on_drag_leave(self, drop_target: Gtk.DropTarget) -> None:
@@ -264,7 +272,7 @@ class MainWindow(Adw.ApplicationWindow):
         Args:
             drop_target: The drop target.
         """
-        self._drop_zone.remove_css_class("drop-highlight")
+        self._archive_list.get_drop_target_widget().remove_css_class("drop-highlight")
 
     def _on_add_files_clicked(
         self, button: Gtk.Button | None = None, *args: object
@@ -342,28 +350,217 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_clear_clicked(self, button: Gtk.Button | None = None, *args: object) -> None:
         """Handle Clear button click."""
-        self._archives.clear()
-        self._update_status()
+        self._archive_list.clear()
         logger.info("Archive list cleared")
 
     def _on_extract_clicked(
         self, button: Gtk.Button | None = None, *args: object
     ) -> None:
         """Handle Extract button click."""
-        if not self._archives:
+        archives = self._archive_list.archive_paths
+        if not archives:
             return
 
         logger.info(
             "Starting extraction of %d archives to %s",
-            len(self._archives),
+            len(archives),
             self._destination,
         )
-        # TODO: Implement extraction with progress dialog
+
+        # Get destination from entry (user may have edited it)
+        dest_text = self._dest_entry.get_text().strip()
+        if dest_text:
+            self._destination = Path(dest_text)
+
+        # Extract first archive (batch support can be added later)
+        self._start_extraction(archives[0])
+
+    def _start_extraction(self, archive_path: Path) -> None:
+        """Start extraction for a single archive.
+
+        Args:
+            archive_path: Path to the archive to extract.
+        """
+        # Create extraction task with current settings
+        task = create_extraction_task(
+            archive_path=archive_path,
+            destination_path=self._destination,
+            conflict_resolution=self._settings.conflict_resolution,
+            create_root_folder=self._settings.create_root_folder,
+            preserve_timestamps=self._settings.preserve_timestamps,
+            preserve_permissions=self._settings.preserve_permissions,
+        )
+
+        # Create progress dialog
+        self._progress_dialog = ProgressDialog(
+            parent=self,
+            task=task,
+        )
+        self._progress_dialog.connect("pause-clicked", self._on_pause_clicked)
+        self._progress_dialog.connect("cancel-clicked", self._on_cancel_clicked)
+
+        # Create worker
+        self._current_worker = ExtractionWorker(
+            task=task,
+            on_progress=self._on_extraction_progress,
+            on_complete=self._on_extraction_complete,
+            on_error=self._on_extraction_error,
+        )
+
+        # Update archive status
+        self._archive_list.update_archive_status(archive_path, TaskStatus.RUNNING)
+
+        # Show dialog and start extraction
+        self._progress_dialog.present()
+        self._current_worker.start()
+
+    def _on_extraction_progress(
+        self, task: ExtractionTask, stats: ProgressStats
+    ) -> None:
+        """Handle extraction progress update.
+
+        This is called from the worker via GLib.idle_add.
+
+        Args:
+            task: The extraction task with updated progress.
+            stats: Current progress statistics.
+        """
+        if self._progress_dialog:
+            self._progress_dialog.update_progress(task, stats)
+
+    def _on_extraction_complete(self, task: ExtractionTask, success: bool) -> None:
+        """Handle extraction completion.
+
+        Args:
+            task: The completed extraction task.
+            success: Whether extraction was successful.
+        """
+        if self._progress_dialog:
+            if success:
+                message = f"Extracted {task.extracted_files} files successfully"
+                self._progress_dialog.show_complete(True, message)
+
+                # Send notification if enabled
+                if self._settings.show_notifications:
+                    self._send_notification(task)
+
+                # Update archive status to completed
+                self._archive_list.update_archive_status(
+                    task.archive_path, TaskStatus.COMPLETED
+                )
+            else:
+                message = task.error_message or "Extraction failed"
+                self._progress_dialog.show_complete(False, message)
+
+                # Update archive status to failed
+                self._archive_list.update_archive_status(
+                    task.archive_path, TaskStatus.FAILED
+                )
+
+        self._current_worker = None
+        logger.info(
+            "Extraction %s: %s",
+            "completed" if success else "failed",
+            task.archive_path.name,
+        )
+
+    def _on_extraction_error(self, task: ExtractionTask, error: str) -> None:
+        """Handle extraction error.
+
+        Args:
+            task: The failed extraction task.
+            error: Error message.
+        """
+        if self._progress_dialog:
+            self._progress_dialog.show_error(error)
+
+        self._current_worker = None
+        logger.error("Extraction error: %s", error)
+
+    def _on_pause_clicked(
+        self, dialog: ProgressDialog, is_paused: bool
+    ) -> None:
+        """Handle pause/resume button click.
+
+        Args:
+            dialog: The progress dialog.
+            is_paused: Whether pause was requested (True) or resume (False).
+        """
+        if self._current_worker:
+            if is_paused:
+                self._current_worker.pause()
+            else:
+                self._current_worker.resume()
+
+    def _on_cancel_clicked(self, dialog: ProgressDialog) -> None:
+        """Handle cancel button click.
+
+        Args:
+            dialog: The progress dialog.
+        """
+        if self._current_worker:
+            self._current_worker.cancel()
 
     def _on_settings_clicked(self, button: Gtk.Button) -> None:
         """Handle Settings button click."""
         logger.debug("Settings clicked")
-        # TODO: Show settings dialog
+
+        dialog = SettingsDialog(
+            parent=self,
+            config_manager=self._config_manager,
+        )
+        dialog.connect("settings-changed", self._on_settings_changed)
+        dialog.present()
+
+    def _on_settings_changed(
+        self, dialog: SettingsDialog, settings: object
+    ) -> None:
+        """Handle settings change.
+
+        Args:
+            dialog: The settings dialog.
+            settings: The updated settings object.
+        """
+        from zipextractor.utils.config import ApplicationSettings
+
+        if isinstance(settings, ApplicationSettings):
+            self._settings = settings
+            self._destination = settings.default_destination
+            self._dest_entry.set_text(str(self._destination))
+            logger.info("Settings updated")
+
+    def _apply_theme(self, theme: str) -> None:
+        """Apply the specified theme.
+
+        Args:
+            theme: Theme to apply ("system", "light", or "dark").
+        """
+        style_manager = Adw.StyleManager.get_default()
+
+        if theme == "light":
+            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+        elif theme == "dark":
+            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        else:  # system
+            style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+
+    def _send_notification(self, task: ExtractionTask) -> None:
+        """Send desktop notification for completed extraction.
+
+        Args:
+            task: The completed extraction task.
+        """
+        app = self.get_application()
+        if not app:
+            return
+
+        notification = Gio.Notification.new("Extraction Complete")
+        notification.set_body(
+            f"Extracted {task.extracted_files} files from {task.archive_path.name}"
+        )
+        notification.set_icon(Gio.ThemedIcon.new("archive-extract-symbolic"))
+
+        app.send_notification(task.task_id, notification)
 
     def add_archives(self, paths: Sequence[str]) -> None:
         """Add archives to the extraction queue.
@@ -374,23 +571,68 @@ class MainWindow(Adw.ApplicationWindow):
         for path_str in paths:
             path = Path(path_str)
             if path.suffix.lower() == ".zip" and path.is_file():
-                if path not in self._archives:
-                    self._archives.append(path)
-                    logger.info("Added archive: %s", path.name)
+                self._archive_list.add_archive(path)
             else:
                 logger.warning("Skipped non-ZIP file: %s", path_str)
 
-        self._update_status()
-
     def _update_status(self) -> None:
         """Update the status label and button states."""
-        count = len(self._archives)
+        count = self._archive_list.archive_count
+        archives = self._archive_list.archive_paths
         if count == 0:
             self._status_label.set_text("No archives selected")
             self._extract_button.set_sensitive(False)
         elif count == 1:
-            self._status_label.set_text(f"1 archive: {self._archives[0].name}")
+            self._status_label.set_text(f"1 archive: {archives[0].name}")
             self._extract_button.set_sensitive(True)
         else:
             self._status_label.set_text(f"{count} archives selected")
             self._extract_button.set_sensitive(True)
+
+    def _on_archive_removed(self, archive_list: ArchiveList, path_str: str) -> None:
+        """Handle archive removal from list.
+
+        Args:
+            archive_list: The archive list widget.
+            path_str: Path of the removed archive.
+        """
+        logger.debug("Archive removed: %s", path_str)
+
+    def _on_archive_inspect(self, archive_list: ArchiveList, path_str: str) -> None:
+        """Handle archive inspect request.
+
+        Args:
+            archive_list: The archive list widget.
+            path_str: Path of the archive to inspect.
+        """
+        archive_path = Path(path_str)
+        logger.debug("Inspecting archive: %s", archive_path.name)
+
+        inspector = ArchiveInspector(parent=self, archive_path=archive_path)
+        inspector.connect("extract-requested", self._on_inspector_extract, archive_path)
+        inspector.present()
+
+    def _on_inspector_extract(
+        self, inspector: ArchiveInspector, archive_path: Path
+    ) -> None:
+        """Handle extract request from inspector.
+
+        Args:
+            inspector: The archive inspector dialog.
+            archive_path: Path to the archive to extract.
+        """
+        # Get destination from entry
+        dest_text = self._dest_entry.get_text().strip()
+        if dest_text:
+            self._destination = Path(dest_text)
+
+        self._start_extraction(archive_path)
+
+    def _on_archives_changed(self, archive_list: ArchiveList, count: int) -> None:
+        """Handle changes to the archive list.
+
+        Args:
+            archive_list: The archive list widget.
+            count: New count of archives in the list.
+        """
+        self._update_status()
