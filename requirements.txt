@@ -1,0 +1,4 @@
+# ZIP Extractor - Production Dependencies
+# Pin versions for reproducible builds
+
+PyGObject>=3.42.0

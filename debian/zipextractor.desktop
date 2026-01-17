@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=ZIP Extractor
+GenericName=Archive Extractor
+Comment=Extract ZIP archives with ease
+Icon=zipextractor
+Exec=zipextractor %F
+Terminal=false
+Categories=Utility;Archiving;GTK;
+MimeType=application/zip;application/x-zip;application/x-zip-compressed;
+Keywords=zip;extract;archive;unzip;decompress;
+StartupNotify=true
+StartupWMClass=zipextractor

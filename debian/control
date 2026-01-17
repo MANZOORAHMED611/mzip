@@ -1,0 +1,31 @@
+Source: zipextractor
+Section: utils
+Priority: optional
+Maintainer: ZIP Extractor Team <zipextractor@example.com>
+Build-Depends: debhelper-compat (= 13),
+               dh-python,
+               python3-all,
+               python3-setuptools,
+               python3-gi,
+               gir1.2-gtk-4.0,
+               gir1.2-adw-1
+Standards-Version: 4.6.0
+Homepage: https://github.com/MANZOORAHMED611/mzip
+Rules-Requires-Root: no
+
+Package: zipextractor
+Architecture: all
+Depends: ${python3:Depends},
+         ${misc:Depends},
+         python3-gi,
+         gir1.2-gtk-4.0,
+         gir1.2-adw-1
+Description: Modern ZIP archive extraction utility for Ubuntu Linux
+ ZIP Extractor is a user-friendly desktop application for extracting
+ ZIP archives on Ubuntu Linux. Features include:
+ .
+  * Intuitive drag-and-drop interface
+  * Batch extraction support
+  * Real-time progress tracking
+  * Automatic conflict resolution
+  * Archive content preview

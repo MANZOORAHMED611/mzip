@@ -1,0 +1,14 @@
+zipextractor (1.0.0-1) unstable; urgency=medium
+
+  * Initial release.
+  * Features:
+    - Single file extraction with destination selection
+    - Batch extraction from multiple archives
+    - Real-time progress bar with percentage and file count
+    - Automatic conflict resolution (overwrite/skip/rename)
+    - Archive content preview before extraction
+    - Drag-and-drop interface for archive selection
+    - Recent extractions history
+    - System tray integration with notifications
+
+ -- ZIP Extractor Team <zipextractor@example.com>  Fri, 17 Jan 2025 00:00:00 +0000
