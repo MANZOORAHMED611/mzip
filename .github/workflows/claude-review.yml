@@ -1,0 +1,47 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  claude-review:
+    # Run on PR events, or on @claude mentions in comments
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '@claude') &&
+       github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Use the project's CLAUDE.md as review context
+          direct_prompt: |
+            Review this PR against the project's CLAUDE.md standards.
+
+            Focus on:
+            1. Code quality — naming conventions, function length, type hints
+            2. Security — no secrets, parameterized queries, input validation
+            3. Architecture — does it follow the patterns established in CLAUDE.md?
+            4. Testing — are there tests for the changes? Do they cover edge cases?
+            5. Sync — if DB/API/frontend changes, are all layers updated?
+
+            Be specific. Reference file:line when flagging issues.
+            Don't nitpick formatting — focus on correctness, security, and architecture.
+            If everything looks good, say so briefly.
+
+          # Trigger on @claude mentions
+          trigger_phrase: "@claude"
+
+          # Allow Claude to suggest fixes
+          allow_edit_suggestions: true
