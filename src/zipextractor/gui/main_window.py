@@ -13,7 +13,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk
+from gi.repository import Adw, Gdk, Gio, Gtk
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -103,11 +103,7 @@ class MainWindow(Adw.ApplicationWindow):
         menu_button.set_tooltip_text("Main menu")
         header.pack_end(menu_button)
 
-        # Content area with toolbar view
-        toolbar_view = Adw.ToolbarView()
-        main_box.append(toolbar_view)
-
-        # Content
+        # Content box (compatible with all libadwaita versions)
         content_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=12,
@@ -117,7 +113,7 @@ class MainWindow(Adw.ApplicationWindow):
             margin_end=12,
         )
         content_box.set_vexpand(True)
-        toolbar_view.set_content(content_box)
+        main_box.append(content_box)
 
         # Archive list (with integrated drop zone)
         self._archive_list = ArchiveList()
@@ -300,75 +296,100 @@ class MainWindow(Adw.ApplicationWindow):
         self, button: Gtk.Button | None = None, *args: object
     ) -> None:
         """Handle Add Files button click."""
-        dialog = Gtk.FileDialog()
-        dialog.set_title("Select ZIP Archives")
+        # Use Gtk.FileChooserDialog for better compatibility
+        dialog = Gtk.FileChooserDialog(
+            title="Select Archives",
+            transient_for=self,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        dialog.add_button("_Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("_Open", Gtk.ResponseType.ACCEPT)
+        dialog.set_modal(True)
+        dialog.set_select_multiple(True)
 
-        # File filter
-        filter_store = Gio.ListStore.new(Gtk.FileFilter)
-        zip_filter = Gtk.FileFilter()
-        zip_filter.set_name("ZIP Archives")
-        zip_filter.add_mime_type("application/zip")
-        zip_filter.add_pattern("*.zip")
-        filter_store.append(zip_filter)
+        # File filter for archives
+        archive_filter = Gtk.FileFilter()
+        archive_filter.set_name("Archives")
+        archive_filter.add_mime_type("application/zip")
+        archive_filter.add_mime_type("application/x-7z-compressed")
+        archive_filter.add_mime_type("application/x-rar")
+        archive_filter.add_mime_type("application/x-tar")
+        archive_filter.add_mime_type("application/gzip")
+        archive_filter.add_pattern("*.zip")
+        archive_filter.add_pattern("*.7z")
+        archive_filter.add_pattern("*.rar")
+        archive_filter.add_pattern("*.tar")
+        archive_filter.add_pattern("*.tar.gz")
+        archive_filter.add_pattern("*.tgz")
+        archive_filter.add_pattern("*.tar.bz2")
+        archive_filter.add_pattern("*.tar.xz")
+        dialog.add_filter(archive_filter)
 
         all_filter = Gtk.FileFilter()
         all_filter.set_name("All Files")
         all_filter.add_pattern("*")
-        filter_store.append(all_filter)
+        dialog.add_filter(all_filter)
 
-        dialog.set_filters(filter_store)
-        dialog.set_default_filter(zip_filter)
+        dialog.set_filter(archive_filter)
+        dialog.connect("response", self._on_files_dialog_response)
+        dialog.show()
 
-        dialog.open_multiple(self, None, self._on_files_selected)
-
-    def _on_files_selected(
+    def _on_files_dialog_response(
         self,
-        dialog: Gtk.FileDialog,
-        result: Gio.AsyncResult,
+        dialog: Gtk.FileChooserDialog,
+        response: int,
     ) -> None:
-        """Handle file selection result.
+        """Handle file selection dialog response.
 
         Args:
-            dialog: The file dialog.
-            result: The async result.
+            dialog: The file chooser dialog.
+            response: The response ID.
         """
-        try:
-            files = dialog.open_multiple_finish(result)
+        if response == Gtk.ResponseType.ACCEPT:
+            files = dialog.get_files()
             if files:
                 paths = [f.get_path() for f in files if f.get_path()]
                 self.add_archives(paths)
-        except GLib.Error as e:
-            if e.code != Gtk.DialogError.DISMISSED:
-                logger.error("File selection error: %s", e.message)
+        dialog.destroy()
 
     def _on_browse_clicked(self, button: Gtk.Button) -> None:
         """Handle Browse button click."""
-        dialog = Gtk.FileDialog()
-        dialog.set_title("Select Destination")
-        dialog.set_initial_folder(Gio.File.new_for_path(str(self._destination)))
-        dialog.select_folder(self, None, self._on_folder_selected)
+        # Use Gtk.FileChooserDialog for better compatibility
+        dialog = Gtk.FileChooserDialog(
+            title="Select Destination",
+            transient_for=self,
+            action=Gtk.FileChooserAction.SELECT_FOLDER,
+        )
+        dialog.add_button("_Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("_Select", Gtk.ResponseType.ACCEPT)
+        dialog.set_modal(True)
 
-    def _on_folder_selected(
+        # Set initial folder if it exists
+        if self._destination.exists():
+            dialog.set_current_folder(Gio.File.new_for_path(str(self._destination)))
+
+        dialog.connect("response", self._on_folder_dialog_response)
+        dialog.show()
+
+    def _on_folder_dialog_response(
         self,
-        dialog: Gtk.FileDialog,
-        result: Gio.AsyncResult,
+        dialog: Gtk.FileChooserDialog,
+        response: int,
     ) -> None:
-        """Handle folder selection result.
+        """Handle folder dialog response.
 
         Args:
-            dialog: The file dialog.
-            result: The async result.
+            dialog: The file chooser dialog.
+            response: The response ID.
         """
-        try:
-            folder = dialog.select_folder_finish(result)
+        if response == Gtk.ResponseType.ACCEPT:
+            folder = dialog.get_file()
             if folder:
                 path = folder.get_path()
                 if path:
                     self._destination = Path(path)
                     self._dest_entry.set_text(path)
-        except GLib.Error as e:
-            if e.code != Gtk.DialogError.DISMISSED:
-                logger.error("Folder selection error: %s", e.message)
+        dialog.destroy()
 
     def _on_clear_clicked(self, button: Gtk.Button | None = None, *args: object) -> None:
         """Handle Clear button click."""
@@ -636,18 +657,54 @@ class MainWindow(Adw.ApplicationWindow):
 
         app.send_notification(task.task_id, notification)
 
-    def add_archives(self, paths: Sequence[str]) -> None:
+    def add_archives(
+        self, paths: Sequence[str], auto_inspect: bool = False
+    ) -> None:
         """Add archives to the extraction queue.
 
         Args:
-            paths: Paths to ZIP archives to add.
+            paths: Paths to archives to add.
+            auto_inspect: If True and only one archive is added, automatically
+                open the archive inspector to show contents.
         """
+        from zipextractor.core.formats import is_supported_archive
+
+        added_paths: list[Path] = []
         for path_str in paths:
             path = Path(path_str)
-            if path.suffix.lower() == ".zip" and path.is_file():
+            if path.is_file() and is_supported_archive(path):
                 self._archive_list.add_archive(path)
+                added_paths.append(path)
             else:
-                logger.warning("Skipped non-ZIP file: %s", path_str)
+                logger.warning("Skipped unsupported file: %s", path_str)
+
+        # Auto-open inspector for single archive when opened from file manager
+        if auto_inspect and len(added_paths) == 1:
+            # Hide the main window - only show the inspector
+            self.set_visible(False)
+            self._show_archive_inspector(added_paths[0], close_app_on_dismiss=True)
+
+    def _show_archive_inspector(
+        self, archive_path: Path, close_app_on_dismiss: bool = False
+    ) -> None:
+        """Show the archive inspector for browsing contents.
+
+        Args:
+            archive_path: Path to the archive to inspect.
+            close_app_on_dismiss: If True, close the app when inspector is dismissed.
+        """
+        logger.info("Opening inspector to browse: %s", archive_path.name)
+        inspector = ArchiveInspector(parent=self, archive_path=archive_path)
+        inspector.connect("extract-requested", self._on_inspector_extract, archive_path)
+        inspector.connect(
+            "extract-selected", self._on_inspector_extract_selected, archive_path
+        )
+
+        # Close the entire app when inspector is dismissed (for file manager opens)
+        if close_app_on_dismiss:
+            inspector.connect("close-request", self._on_inspector_close_app)
+
+        inspector.present()
 
     def _update_status(self) -> None:
         """Update the status label and button states."""
@@ -701,6 +758,45 @@ class MainWindow(Adw.ApplicationWindow):
             self._destination = Path(dest_text)
 
         self._start_extraction(archive_path)
+
+    def _on_inspector_extract_selected(
+        self,
+        inspector: ArchiveInspector,
+        selected_paths: list[str],
+        archive_path: Path,
+    ) -> None:
+        """Handle extract selected files request from inspector.
+
+        Args:
+            inspector: The archive inspector dialog.
+            selected_paths: List of file paths to extract.
+            archive_path: Path to the archive to extract from.
+        """
+        # Get destination from entry
+        dest_text = self._dest_entry.get_text().strip()
+        if dest_text:
+            self._destination = Path(dest_text)
+
+        # TODO: Implement selective extraction with selected_paths
+        # For now, extract all files
+        logger.info("Extracting %d selected files from %s", len(selected_paths), archive_path.name)
+        self._start_extraction(archive_path)
+
+    def _on_inspector_close_app(self, inspector: ArchiveInspector) -> bool:
+        """Handle inspector close when app should exit entirely.
+
+        This is called when the user opened an archive from the file manager
+        and then closes the inspector without extracting.
+
+        Args:
+            inspector: The archive inspector dialog.
+
+        Returns:
+            False to allow the close to proceed.
+        """
+        logger.debug("Inspector closed, quitting application")
+        self.get_application().quit()
+        return False
 
     def _on_archives_changed(self, archive_list: ArchiveList, count: int) -> None:
         """Handle changes to the archive list.

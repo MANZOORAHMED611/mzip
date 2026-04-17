@@ -9,10 +9,10 @@ description = "Modern ZIP archive extraction utility for Ubuntu Linux"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
 authors = [
-    {name = "ZIP Extractor Team"}
+    {name = "Green Olive Tech"}
 ]
 maintainers = [
-    {name = "ZIP Extractor Team"}
+    {name = "Green Olive Tech"}
 ]
 keywords = ["zip", "archive", "extraction", "gtk", "gui", "ubuntu", "linux"]
 classifiers = [
@@ -31,6 +31,11 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "PyGObject>=3.42.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "py7zr>=0.20.0",
+    "rarfile>=4.1",
+    "zstandard>=0.22.0",
 ]
 
 [project.optional-dependencies]
@@ -51,6 +56,7 @@ Issues = "https://github.com/MANZOORAHMED611/mzip/issues"
 
 [project.scripts]
 zipextractor = "zipextractor.__main__:main"
+mzip = "zipextractor.cli.main:cli"
 
 [project.gui-scripts]
 zipextractor-gui = "zipextractor.__main__:main"
@@ -127,6 +133,12 @@ known-first-party = ["zipextractor"]
 "src/zipextractor/__main__.py" = [
     "PLC0415",  # Import not at top level (lazy imports for fast --help)
 ]
+"src/zipextractor/cli/*.py" = [
+    "PLC0415",  # Import not at top level (lazy imports for fast CLI)
+    "PLR0912",  # Too many branches (CLI commands often have complex logic)
+    "PLR0913",  # Too many arguments (CLI functions often have many options)
+    "PLR0915",  # Too many statements (CLI commands can be complex)
+]
 "src/zipextractor/core/validation.py" = [
     "PLR0911",  # Too many return statements (validation needs early returns)
     "SIM105",   # contextlib.suppress preference (explicit try/except clearer)
@@ -135,6 +147,13 @@ known-first-party = ["zipextractor"]
     "PLR0911",  # Too many return statements (extraction has many exit points)
     "PLR0912",  # Too many branches (complex extraction logic)
     "PLR0915",  # Too many statements (extraction is inherently complex)
+]
+"src/zipextractor/core/parallel.py" = [
+    "PLC0415",  # Import not at top level (lazy imports for performance)
+    "SIM117",   # Single with statement (zf.open and open have different contexts)
+]
+"src/zipextractor/core/benchmark.py" = [
+    "PLC0415",  # Import not at top level (lazy imports for performance)
 ]
 
 # Black configuration
@@ -172,8 +191,9 @@ ignore_missing_imports = true
 module = [
     "zipextractor.app",
     "zipextractor.gui.*",
+    "zipextractor.data.nautilus.*",
 ]
-# GTK classes are typed as Any since PyGObject lacks type stubs
+# GTK/GObject classes are typed as Any since PyGObject lacks type stubs
 disable_error_code = ["misc"]
 
 [[tool.mypy.overrides]]

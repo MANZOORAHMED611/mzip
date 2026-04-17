@@ -1,8 +1,10 @@
 """Archive validation functions for ZIP Extractor.
 
-This module provides functions to validate ZIP archives, detect potential
+This module provides functions to validate archives, detect potential
 security threats like zip bombs and path traversal attacks, and check
 system resources before extraction.
+
+Supports multiple archive formats including ZIP, 7z, RAR, TAR, and more.
 """
 
 from __future__ import annotations
@@ -13,14 +15,14 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from zipextractor.core.models import ArchiveFile, ArchiveInfo
+from zipextractor.core.models import ArchiveFile, ArchiveFormat, ArchiveInfo
 
 
 def validate_archive(path: Path) -> tuple[bool, str | None]:
-    """Validate that a file is a valid ZIP archive.
+    """Validate that a file is a valid archive.
 
-    Checks that the file exists, is not empty, and is a valid ZIP file
-    that can be read by the zipfile module.
+    Checks that the file exists, is not empty, and is a valid archive
+    that can be read by the appropriate handler.
 
     Args:
         path: Path to the archive file to validate.
@@ -44,12 +46,34 @@ def validate_archive(path: Path) -> tuple[bool, str | None]:
     if path.stat().st_size == 0:
         return False, "File is empty"
 
+    # Detect format
+    from zipextractor.core.formats import detect_format
+
+    fmt = detect_format(path)
+    if fmt is None:
+        return False, "Unsupported archive format"
+
+    # Validate based on format
+    try:
+        if fmt == ArchiveFormat.ZIP or fmt in (
+            ArchiveFormat.JAR, ArchiveFormat.WAR, ArchiveFormat.APK,
+            ArchiveFormat.EPUB, ArchiveFormat.DOCX, ArchiveFormat.XLSX,
+        ):
+            return _validate_zip(path)
+        else:
+            # Use handler for other formats
+            return _validate_with_handler(path, fmt)
+    except Exception as e:
+        return False, f"Error validating archive: {e}"
+
+
+def _validate_zip(path: Path) -> tuple[bool, str | None]:
+    """Validate a ZIP archive."""
     if not zipfile.is_zipfile(path):
         return False, "File is not a valid ZIP archive"
 
     try:
         with zipfile.ZipFile(path, "r") as zf:
-            # Test archive integrity by reading the central directory
             bad_file = zf.testzip()
             if bad_file is not None:
                 return False, f"Corrupted file in archive: {bad_file}"
@@ -61,8 +85,23 @@ def validate_archive(path: Path) -> tuple[bool, str | None]:
     return True, None
 
 
+def _validate_with_handler(path: Path, fmt: ArchiveFormat) -> tuple[bool, str | None]:
+    """Validate using the appropriate handler."""
+    try:
+        from zipextractor.core.handlers import get_handler
+
+        handler = get_handler(path, fmt)
+        if handler.test():
+            return True, None
+        return False, "Archive integrity test failed"
+    except ValueError as e:
+        return False, str(e)
+    except Exception as e:
+        return False, f"Error validating archive: {e}"
+
+
 def get_archive_info(path: Path) -> ArchiveInfo:
-    """Get detailed information about a ZIP archive.
+    """Get detailed information about an archive.
 
     Reads the archive metadata and returns an ArchiveInfo object with
     all fields populated, including a list of ArchiveFile objects for
@@ -76,7 +115,7 @@ def get_archive_info(path: Path) -> ArchiveInfo:
 
     Raises:
         FileNotFoundError: If the archive file does not exist.
-        zipfile.BadZipFile: If the file is not a valid ZIP archive.
+        ValueError: If the format is not supported.
 
     Examples:
         >>> info = get_archive_info(Path("archive.zip"))
@@ -85,6 +124,25 @@ def get_archive_info(path: Path) -> ArchiveInfo:
     if not path.exists():
         raise FileNotFoundError(f"Archive not found: {path}")
 
+    # Detect format
+    from zipextractor.core.formats import detect_format
+
+    fmt = detect_format(path)
+    if fmt is None:
+        raise ValueError(f"Unsupported archive format: {path}")
+
+    # Use format-specific info retrieval
+    if fmt == ArchiveFormat.ZIP or fmt in (
+        ArchiveFormat.JAR, ArchiveFormat.WAR, ArchiveFormat.APK,
+        ArchiveFormat.EPUB, ArchiveFormat.DOCX, ArchiveFormat.XLSX,
+    ):
+        return _get_zip_info(path)
+    else:
+        return _get_handler_info(path, fmt)
+
+
+def _get_zip_info(path: Path) -> ArchiveInfo:
+    """Get info for ZIP archives using zipfile."""
     file_size = path.stat().st_size
     validation_errors: list[str] = []
     files: list[ArchiveFile] = []
@@ -146,6 +204,59 @@ def get_archive_info(path: Path) -> ArchiveInfo:
         uncompressed_size=uncompressed_size,
         file_count=len([f for f in files if not f.is_directory]),
         compression_method=compression_method,
+        has_password=has_password,
+        root_folder=root_folder,
+        is_valid=len(validation_errors) == 0,
+        validation_errors=validation_errors,
+        files=files,
+    )
+
+
+def _get_handler_info(path: Path, fmt: ArchiveFormat) -> ArchiveInfo:
+    """Get info using the format-specific handler."""
+    from zipextractor.core.handlers import get_handler
+
+    file_size = path.stat().st_size
+    validation_errors: list[str] = []
+    files: list[ArchiveFile] = []
+    uncompressed_size = 0
+    has_password = False
+
+    try:
+        handler = get_handler(path, fmt)
+        file_infos = handler.list_contents()
+
+        for info in file_infos:
+            archive_file = ArchiveFile(
+                path=info.name,
+                size=info.size,
+                compressed_size=info.compressed_size,
+                is_directory=info.is_directory,
+                modified_time=info.modified,
+                crc32=info.crc32,
+            )
+            files.append(archive_file)
+            uncompressed_size += info.size
+
+        has_password = handler.is_encrypted()
+
+        # Test integrity
+        if not handler.test():
+            validation_errors.append("Archive integrity test failed")
+
+    except Exception as e:
+        validation_errors.append(f"Error reading archive: {e}")
+
+    # Detect root folder
+    file_paths = [f.path for f in files]
+    root_folder = detect_root_folder(file_paths)
+
+    return ArchiveInfo(
+        path=path,
+        file_size=file_size,
+        uncompressed_size=uncompressed_size,
+        file_count=len([f for f in files if not f.is_directory]),
+        compression_method=fmt.name.lower(),
         has_password=has_password,
         root_folder=root_folder,
         is_valid=len(validation_errors) == 0,

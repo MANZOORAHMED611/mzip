@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.github.mzip</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>MZip</name>
+  <summary>Modern archive manager for Linux</summary>
+  <description>
+    <p>
+      MZip is a powerful and modern archive utility for Linux that provides
+      comprehensive support for creating, extracting, and managing archive files.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Support for 25+ archive formats (ZIP, 7z, RAR, TAR, and more)</li>
+      <li>Create encrypted archives with AES-256 encryption</li>
+      <li>Multi-threaded extraction and compression for maximum performance</li>
+      <li>Built-in file preview for text, images, and code</li>
+      <li>Archive integrity testing and repair capabilities</li>
+      <li>Search within archives by filename or content</li>
+      <li>Modern GTK4/libadwaita interface following GNOME HIG</li>
+      <li>Command-line interface for scripting and automation</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">mzip.desktop</launchable>
+  <url type="homepage">https://github.com/MANZOORAHMED611/mzip</url>
+  <url type="bugtracker">https://github.com/MANZOORAHMED611/mzip/issues</url>
+  <developer_name>Green Olive Tech</developer_name>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <binary>mzip</binary>
+    <binary>mzip-gui</binary>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <categories>
+    <category>Utility</category>
+    <category>Archiving</category>
+  </categories>
+  <keywords>
+    <keyword>archive</keyword>
+    <keyword>zip</keyword>
+    <keyword>7z</keyword>
+    <keyword>tar</keyword>
+    <keyword>extract</keyword>
+    <keyword>compress</keyword>
+    <keyword>unzip</keyword>
+    <keyword>rar</keyword>
+  </keywords>
+  <releases>
+    <release version="1.0.0" date="2026-01-17">
+      <description>
+        <p>Initial release of MZip with full feature set:</p>
+        <ul>
+          <li>Archive creation and extraction</li>
+          <li>Multi-format support</li>
+          <li>Encryption capabilities</li>
+          <li>GUI and CLI interfaces</li>
+          <li>GNOME integration</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>

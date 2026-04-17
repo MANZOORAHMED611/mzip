@@ -108,7 +108,8 @@ class ZipExtractorApp(Adw.Application):
         window = self.get_active_window()
         if window is not None and hasattr(window, "add_archives"):
             paths = [f.get_path() for f in files if f.get_path() is not None]
-            window.add_archives(paths)
+            # Auto-inspect when opening files to show contents immediately
+            window.add_archives(paths, auto_inspect=True)
 
     def _setup_actions(self) -> None:
         """Set up application-wide actions."""
@@ -122,6 +123,54 @@ class ZipExtractorApp(Adw.Application):
         about_action = Gio.SimpleAction.new("about", None)
         about_action.connect("activate", self._on_about)
         self.add_action(about_action)
+
+        # Open action (Ctrl+O)
+        open_action = Gio.SimpleAction.new("open-archive", None)
+        open_action.connect("activate", self._on_open_archive)
+        self.add_action(open_action)
+        self.set_accels_for_action("app.open-archive", ["<Control>o"])
+
+        # New archive action (Ctrl+N)
+        new_action = Gio.SimpleAction.new("new", None)
+        new_action.connect("activate", self._on_new)
+        self.add_action(new_action)
+        self.set_accels_for_action("app.new", ["<Control>n"])
+
+        # Extract all action (Ctrl+E)
+        extract_action = Gio.SimpleAction.new("extract", None)
+        extract_action.connect("activate", self._on_extract)
+        self.add_action(extract_action)
+        self.set_accels_for_action("app.extract", ["<Control>e"])
+
+        # Extract selected action (Ctrl+Shift+E)
+        extract_selected_action = Gio.SimpleAction.new("extract-selected", None)
+        extract_selected_action.connect("activate", self._on_extract_selected)
+        self.add_action(extract_selected_action)
+        self.set_accels_for_action("app.extract-selected", ["<Control><Shift>e"])
+
+        # Search action (Ctrl+F)
+        search_action = Gio.SimpleAction.new("search", None)
+        search_action.connect("activate", self._on_search)
+        self.add_action(search_action)
+        self.set_accels_for_action("app.search", ["<Control>f"])
+
+        # Test archive action (Ctrl+T)
+        test_action = Gio.SimpleAction.new("test", None)
+        test_action.connect("activate", self._on_test)
+        self.add_action(test_action)
+        self.set_accels_for_action("app.test", ["<Control>t"])
+
+        # Refresh action (F5)
+        refresh_action = Gio.SimpleAction.new("refresh", None)
+        refresh_action.connect("activate", self._on_refresh)
+        self.add_action(refresh_action)
+        self.set_accels_for_action("app.refresh", ["F5"])
+
+        # Keyboard shortcuts help (Ctrl+?)
+        shortcuts_action = Gio.SimpleAction.new("shortcuts", None)
+        shortcuts_action.connect("activate", self._on_shortcuts)
+        self.add_action(shortcuts_action)
+        self.set_accels_for_action("app.shortcuts", ["<Control>question"])
 
         logger.debug("Application actions configured")
 
@@ -148,15 +197,153 @@ class ZipExtractorApp(Adw.Application):
         """
         about = Adw.AboutWindow(
             transient_for=self.get_active_window(),
-            application_name="ZIP Extractor",
-            application_icon="zipextractor",
+            application_name="MZip",
+            application_icon="mzip",
             version=__version__,
-            developer_name="ZIP Extractor Team",
+            developer_name="Green Olive Tech",
             license_type=Gio.License.GPL_3_0,
-            comments="Modern ZIP archive extraction utility for Ubuntu Linux",
-            website="https://github.com/zipextractor/zipextractor",
+            comments="Modern archive utility for Linux",
+            website="https://github.com/MANZOORAHMED611/mzip",
+            copyright="Copyright 2026 Green Olive Tech",
         )
         about.present()
+
+    def _on_open_archive(
+        self, action: Gio.SimpleAction, parameter: GLib.Variant | None
+    ) -> None:
+        """Handle open action (Ctrl+O)."""
+        window = self.get_active_window()
+        if window and hasattr(window, "show_open_dialog"):
+            window.show_open_dialog()
+        else:
+            logger.debug("Open dialog not available")
+
+    def _on_new(
+        self, action: Gio.SimpleAction, parameter: GLib.Variant | None
+    ) -> None:
+        """Handle new archive action (Ctrl+N)."""
+        window = self.get_active_window()
+        if window and hasattr(window, "show_create_dialog"):
+            window.show_create_dialog()
+        else:
+            logger.debug("Create dialog not available")
+
+    def _on_extract(
+        self, action: Gio.SimpleAction, parameter: GLib.Variant | None
+    ) -> None:
+        """Handle extract all action (Ctrl+E)."""
+        window = self.get_active_window()
+        if window and hasattr(window, "extract_all"):
+            window.extract_all()
+        else:
+            logger.debug("Extract not available")
+
+    def _on_extract_selected(
+        self, action: Gio.SimpleAction, parameter: GLib.Variant | None
+    ) -> None:
+        """Handle extract selected action (Ctrl+Shift+E)."""
+        window = self.get_active_window()
+        if window and hasattr(window, "extract_selected"):
+            window.extract_selected()
+        else:
+            logger.debug("Extract selected not available")
+
+    def _on_search(
+        self, action: Gio.SimpleAction, parameter: GLib.Variant | None
+    ) -> None:
+        """Handle search action (Ctrl+F)."""
+        window = self.get_active_window()
+        if window and hasattr(window, "show_search"):
+            window.show_search()
+        else:
+            logger.debug("Search not available")
+
+    def _on_test(
+        self, action: Gio.SimpleAction, parameter: GLib.Variant | None
+    ) -> None:
+        """Handle test archive action (Ctrl+T)."""
+        window = self.get_active_window()
+        if window and hasattr(window, "test_archive"):
+            window.test_archive()
+        else:
+            logger.debug("Test not available")
+
+    def _on_refresh(
+        self, action: Gio.SimpleAction, parameter: GLib.Variant | None
+    ) -> None:
+        """Handle refresh action (F5)."""
+        window = self.get_active_window()
+        if window and hasattr(window, "refresh"):
+            window.refresh()
+        else:
+            logger.debug("Refresh not available")
+
+    def _on_shortcuts(
+        self, action: Gio.SimpleAction, parameter: GLib.Variant | None
+    ) -> None:
+        """Show keyboard shortcuts window."""
+        shortcuts_window = Gtk.ShortcutsWindow(
+            transient_for=self.get_active_window(),
+            modal=True,
+        )
+
+        # Create shortcuts section
+        section = Gtk.ShortcutsSection(
+            section_name="shortcuts",
+            title="All Shortcuts",
+            visible=True,
+        )
+
+        # File operations group
+        file_group = Gtk.ShortcutsGroup(title="File Operations", visible=True)
+        file_group.append(Gtk.ShortcutsShortcut(
+            title="Open Archive",
+            accelerator="<Control>o",
+            visible=True,
+        ))
+        file_group.append(Gtk.ShortcutsShortcut(
+            title="Create New Archive",
+            accelerator="<Control>n",
+            visible=True,
+        ))
+        file_group.append(Gtk.ShortcutsShortcut(
+            title="Quit",
+            accelerator="<Control>q",
+            visible=True,
+        ))
+        section.append(file_group)
+
+        # Archive operations group
+        archive_group = Gtk.ShortcutsGroup(title="Archive Operations", visible=True)
+        archive_group.append(Gtk.ShortcutsShortcut(
+            title="Extract All",
+            accelerator="<Control>e",
+            visible=True,
+        ))
+        archive_group.append(Gtk.ShortcutsShortcut(
+            title="Extract Selected",
+            accelerator="<Control><Shift>e",
+            visible=True,
+        ))
+        archive_group.append(Gtk.ShortcutsShortcut(
+            title="Test Archive",
+            accelerator="<Control>t",
+            visible=True,
+        ))
+        archive_group.append(Gtk.ShortcutsShortcut(
+            title="Search",
+            accelerator="<Control>f",
+            visible=True,
+        ))
+        archive_group.append(Gtk.ShortcutsShortcut(
+            title="Refresh",
+            accelerator="F5",
+            visible=True,
+        ))
+        section.append(archive_group)
+
+        shortcuts_window.add_section(section)
+        shortcuts_window.present()
 
     def _load_css(self) -> None:
         """Load custom CSS styles for the application."""

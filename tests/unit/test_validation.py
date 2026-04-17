@@ -76,8 +76,12 @@ class TestValidateArchive:
 
         assert is_valid is False
         assert error_message is not None
-        # The error message should indicate it's not a valid ZIP
-        assert "not a valid" in error_message.lower() or "invalid" in error_message.lower()
+        # The error message should indicate it's not a valid archive
+        assert (
+            "not a valid" in error_message.lower()
+            or "invalid" in error_message.lower()
+            or "unsupported" in error_message.lower()
+        )
 
     def test_validate_directory_not_file(self, tmp_path: Path) -> None:
         """Test that passing a directory returns an error."""

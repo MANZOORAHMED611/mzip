@@ -125,14 +125,20 @@ class SettingsDialog(Adw.PreferencesWindow):
             title="Notifications",
         )
 
-        self._notif_switch = Adw.SwitchRow(
+        # Use ActionRow + Switch for libadwaita 1.1 compatibility
+        notif_row = Adw.ActionRow(
             title="Show Notifications",
             subtitle="Display desktop notification when extraction completes",
+        )
+        self._notif_switch = Gtk.Switch(
             active=self._settings.show_notifications,
+            valign=Gtk.Align.CENTER,
         )
         self._notif_switch.connect("notify::active", self._on_setting_changed)
+        notif_row.add_suffix(self._notif_switch)
+        notif_row.set_activatable_widget(self._notif_switch)
 
-        notif_group.add(self._notif_switch)
+        notif_group.add(notif_row)
         page.add(notif_group)
 
         return page
@@ -184,32 +190,47 @@ class SettingsDialog(Adw.PreferencesWindow):
             title="Extraction Options",
         )
 
-        # Create root folder
-        self._root_folder_switch = Adw.SwitchRow(
+        # Create root folder - use ActionRow + Switch for libadwaita 1.1
+        root_folder_row = Adw.ActionRow(
             title="Create Root Folder",
             subtitle="Extract into a folder named after the archive",
+        )
+        self._root_folder_switch = Gtk.Switch(
             active=self._settings.create_root_folder,
+            valign=Gtk.Align.CENTER,
         )
         self._root_folder_switch.connect("notify::active", self._on_setting_changed)
-        options_group.add(self._root_folder_switch)
+        root_folder_row.add_suffix(self._root_folder_switch)
+        root_folder_row.set_activatable_widget(self._root_folder_switch)
+        options_group.add(root_folder_row)
 
         # Preserve timestamps
-        self._timestamps_switch = Adw.SwitchRow(
+        timestamps_row = Adw.ActionRow(
             title="Preserve Timestamps",
             subtitle="Keep original file modification dates",
+        )
+        self._timestamps_switch = Gtk.Switch(
             active=self._settings.preserve_timestamps,
+            valign=Gtk.Align.CENTER,
         )
         self._timestamps_switch.connect("notify::active", self._on_setting_changed)
-        options_group.add(self._timestamps_switch)
+        timestamps_row.add_suffix(self._timestamps_switch)
+        timestamps_row.set_activatable_widget(self._timestamps_switch)
+        options_group.add(timestamps_row)
 
         # Preserve permissions
-        self._permissions_switch = Adw.SwitchRow(
+        permissions_row = Adw.ActionRow(
             title="Preserve Permissions",
             subtitle="Keep original file permissions (Unix only)",
+        )
+        self._permissions_switch = Gtk.Switch(
             active=self._settings.preserve_permissions,
+            valign=Gtk.Align.CENTER,
         )
         self._permissions_switch.connect("notify::active", self._on_setting_changed)
-        options_group.add(self._permissions_switch)
+        permissions_row.add_suffix(self._permissions_switch)
+        permissions_row.set_activatable_widget(self._permissions_switch)
+        options_group.add(permissions_row)
 
         page.add(options_group)
 
@@ -218,8 +239,8 @@ class SettingsDialog(Adw.PreferencesWindow):
             title="Advanced",
         )
 
-        # Max concurrent extractions
-        self._concurrent_spin = Adw.SpinRow(
+        # Max concurrent extractions - use ActionRow + SpinButton for libadwaita 1.1
+        concurrent_row = Adw.ActionRow(
             title="Concurrent Extractions",
             subtitle="Maximum number of simultaneous extractions",
         )
@@ -229,10 +250,15 @@ class SettingsDialog(Adw.PreferencesWindow):
             upper=8,
             step_increment=1,
         )
-        self._concurrent_spin.set_adjustment(adjustment)
-        self._concurrent_spin.connect("notify::value", self._on_setting_changed)
+        self._concurrent_spin = Gtk.SpinButton(
+            adjustment=adjustment,
+            valign=Gtk.Align.CENTER,
+        )
+        self._concurrent_spin.connect("value-changed", self._on_setting_changed)
+        concurrent_row.add_suffix(self._concurrent_spin)
+        concurrent_row.set_activatable_widget(self._concurrent_spin)
 
-        advanced_group.add(self._concurrent_spin)
+        advanced_group.add(concurrent_row)
         page.add(advanced_group)
 
         return page
@@ -278,37 +304,41 @@ class SettingsDialog(Adw.PreferencesWindow):
 
     def _on_dest_button_clicked(self, button: Gtk.Button) -> None:
         """Handle destination folder button click."""
-        dialog = Gtk.FileDialog(
+        # Use FileChooserDialog for better compatibility
+        dialog = Gtk.FileChooserDialog(
             title="Select Default Destination",
-            modal=True,
+            transient_for=self,
+            action=Gtk.FileChooserAction.SELECT_FOLDER,
         )
+        dialog.add_button("_Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("_Select", Gtk.ResponseType.ACCEPT)
+        dialog.set_modal(True)
 
-        # Set initial folder
-        initial_folder = Gio.File.new_for_path(
-            str(self._settings.default_destination)
-        )
-        dialog.set_initial_folder(initial_folder)
+        # Set initial folder if it exists
+        if self._settings.default_destination.exists():
+            dialog.set_current_folder(
+                Gio.File.new_for_path(str(self._settings.default_destination))
+            )
+        dialog.connect("response", self._on_dest_folder_response)
+        dialog.show()
 
-        dialog.select_folder(self, None, self._on_dest_folder_selected)
-
-    def _on_dest_folder_selected(
+    def _on_dest_folder_response(
         self,
-        dialog: Gtk.FileDialog,
-        result: Gio.AsyncResult,
+        dialog: Gtk.FileChooserDialog,
+        response: int,
     ) -> None:
         """Handle destination folder selection."""
-        try:
-            folder = dialog.select_folder_finish(result)
-            if folder:
+        if response == Gtk.ResponseType.ACCEPT:
+            folder = dialog.get_file()
+            if folder and folder.get_path():
                 path = Path(folder.get_path())
                 self._settings.default_destination = path
                 self._dest_row.set_subtitle(str(path))
                 self._modified = True
                 logger.debug("Default destination changed to %s", path)
-        except Exception as e:
-            logger.debug("Folder selection cancelled: %s", e)
+        dialog.destroy()
 
-    def _on_setting_changed(self, widget: Gtk.Widget, param: object) -> None:
+    def _on_setting_changed(self, widget: Gtk.Widget, param: object = None) -> None:
         """Handle setting change."""
         self._modified = True
         self._update_settings_from_ui()
